@@ -1,0 +1,5 @@
+{
+  "path": "./data/gangneung/",
+  "zone_tbl": "gangneung_zoneTable.csv",
+  "raw_data": "gangneung_rawData_20241025.csv"
+}
