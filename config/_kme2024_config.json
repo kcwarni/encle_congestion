@@ -2,8 +2,8 @@
   "task": "kme2024",
   "path": "./data/kme2024/",
   "zone_tbl": "kme2024_zoneTable.csv",
-  "raw_data": "kme2024_rawData_20241108.csv",
-  "save_data": "v1108_일자별 공간별 시간별 체류인원항목.csv",
+  "raw_data": "kme2024_rawData_20241106.csv",
+  "save_data": "v1106_일자별 공간별 시간별 체류인원항목.csv",
   "img_file": "kme2024_map_1079_1009.jpg",
   "is_line_plot": true,
   "is_heatmap_plot": true

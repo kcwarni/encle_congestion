@@ -54,6 +54,7 @@ def metrix_to_sequence(zone_tbl, metrix_df):
     # coordinates
     zone_tbl["coords"] = zone_tbl["coords"].map(literal_eval)
     coords = []
+    
     for _, row in mtx_seq_df.iterrows():
         seq1_coords = zone_tbl[zone_tbl["location"] == row["seq_1"]]["coords"].values[0]
         seq2_coords = zone_tbl[zone_tbl["location"] == row["seq_2"]]["coords"].values[0]

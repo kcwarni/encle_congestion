@@ -1,1 +1,1 @@
-from .plot import CongestionPolt
+from .plot import CongestionPolt, CongestionImagePolt

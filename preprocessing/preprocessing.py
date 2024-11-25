@@ -96,7 +96,7 @@ class Preprocessing:
         
         return srcmac_unique_df
 
-    def calc_loc_people_counts(self, raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, time=False):
+    def calc_loc_people_counts(self, raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=False, is_save=False):
         """
             location 별
                 1. 시간 순서로 정렬
@@ -106,30 +106,115 @@ class Preprocessing:
         """
         # raw_data에서 srcmac_unique를 필터링
         raw_data_df = raw_data[raw_data["SRCMAC"].isin(srcmac_unique_df["SRCMAC"])]
+        raw_data_df.loc[:, "on_time"] = raw_data_df["TIME_KST"].dt.hour
 
         if loc == True:
-            # location, srcmac 별 time diff 계산
-            time_diff_df = raw_data_df.groupby(["location", "SRCMAC"])["TIME_KST"].agg(["min", "max"])
-            time_diff_df["time_diff"] = time_diff_df["max"] - time_diff_df["min"]
+            if on_time == True:
+                # location, srcmac 별 time diff 계산
+                time_diff_df = raw_data_df.groupby(["location", "SRCMAC", "on_time"])["TIME_KST"].agg(["min", "max"])
+                time_diff_df["time_diff"] = time_diff_df["max"] - time_diff_df["min"]
 
-            # rssi mean 계산
-            riss_diff_df = raw_data_df.groupby(["location", "SRCMAC"])["RSSI"].agg(["mean"]).astype(int)
+                # rssi mean 계산
+                riss_diff_df = raw_data_df.groupby(["location", "SRCMAC", "on_time"])["RSSI"].agg(["mean"]).astype(int)
 
-            # time diff & rssi mean merge
-            both_df = pd.merge(time_diff_df, riss_diff_df, left_index=True, right_index=True).reset_index()
-            both_df = both_df[both_df["time_diff"] >= pd.Timedelta(cumsum)].reset_index(drop=True)
-            both_df.columns = ["location", "SRCMAC", "time_min", "time_max", "time_diff", "rssi_mean"]
+                # time diff & rssi mean merge
+                both_df = pd.merge(time_diff_df, riss_diff_df, left_index=True, right_index=True).reset_index()
+                both_df = both_df[both_df["time_diff"] >= pd.Timedelta(cumsum)].reset_index(drop=True)
+                both_df.columns = ["location", "SRCMAC", "on_time", "time_min", "time_max", "time_diff", "rssi_mean"]
 
+                # Location 별 People Count 계산
+                people_cnt_df = both_df.groupby(["location", "on_time"])[["SRCMAC"]].nunique().reset_index()
+
+                if is_save == True:
+                    # save 폴더가 없으면 save 폴더 생성
+                    if not os.path.exists(os.path.join(self.args.path, "save")):
+                        os.makedirs(os.path.join(self.args.path, "save"))
+                        logger.info(f"The save folder has been created!")
+                    
+                    # location 별 SRCMAC 목록 데이터 저장
+                    both_df.to_csv(f"{os.path.join(self.args.path, "save", self.args.save_data)}", index=False, encoding="utf-8-sig")
+                    logger.info(f"{self.args.save_data} has been created!")
+
+                    # location 별 SRCMAC의 수 데이터 저장
+                    save_file = f"{self.args.save_data[:5]}_일자별 공간별 시간별 체류인원수.csv"
+                    people_cnt_df.to_csv(f"{os.path.join(self.args.path, "save", save_file)}", index=False, encoding="utf-8-sig")
+                    logger.info(f"{save_file} has been created!")
+            
+            elif on_time == False:
+                # location, srcmac 별 time diff 계산
+                time_diff_df = raw_data_df.groupby(["location", "SRCMAC"])["TIME_KST"].agg(["min", "max"])
+                time_diff_df["time_diff"] = time_diff_df["max"] - time_diff_df["min"]
+
+                # rssi mean 계산
+                riss_diff_df = raw_data_df.groupby(["location", "SRCMAC"])["RSSI"].agg(["mean"]).astype(int)
+
+                # time diff & rssi mean merge
+                both_df = pd.merge(time_diff_df, riss_diff_df, left_index=True, right_index=True).reset_index()
+                both_df = both_df[both_df["time_diff"] >= pd.Timedelta(cumsum)].reset_index(drop=True)
+                both_df.columns = ["location", "SRCMAC", "time_min", "time_max", "time_diff", "rssi_mean"]
+
+                # Location 별 People Count 계산
+                people_cnt_df = both_df.groupby(["location"])[["SRCMAC"]].nunique().reset_index()
+
+                if is_save == True:
+                    # save 폴더가 없으면 save 폴더 생성
+                    if not os.path.exists(os.path.join(self.args.path, "save")):
+                        os.makedirs(os.path.join(self.args.path, "save"))
+                        logger.info(f"The save folder has been created!")
+
+                    # location 별 SRCMAC의 수 데이터 저장
+                    save_file = f"{self.args.save_data[:5]}_일자별 공간별 체류인원수.csv"
+                    people_cnt_df.to_csv(f"{os.path.join(self.args.path, "save", save_file)}", index=False, encoding="utf-8-sig")
+                    logger.info(f"{save_file} has been created!")
+            
             logger.info(f"People Count by Location : {both_df.shape}")
-            return both_df, raw_data_df
+            return both_df, people_cnt_df, raw_data_df
         
         else:
-            # rssi mean 계산
-            riss_diff_df = raw_data_df.groupby("SRCMAC")["RSSI"].agg(["mean"]).astype(int)
-            riss_diff_df.reset_index(inplace=True)
+            if on_time == True:
+                # rssi mean 계산
+                riss_diff_df = raw_data_df.groupby(["SRCMAC", "on_time"])["RSSI"].agg(["mean"]).astype(int)
+                riss_diff_df.reset_index(inplace=True)
 
-            # srcmac_unique와 rssi mean 병합
-            merged_srcmac_riss_df = pd.merge(srcmac_unique_df, riss_diff_df, left_on="SRCMAC", right_on="SRCMAC", how="left")
+                # srcmac_unique와 rssi mean 병합
+                merged_srcmac_riss_df = pd.merge(srcmac_unique_df, riss_diff_df, left_on="SRCMAC", right_on="SRCMAC", how="left")
+                merged_srcmac_riss_df = merged_srcmac_riss_df[merged_srcmac_riss_df["time_diff"] >= pd.Timedelta(cumsum)].reset_index(drop=True)
+                merged_srcmac_riss_df.columns = ["SRCMAC", "time_min", "time_max", "time_diff", "on_time", "rssi_mean"]
+
+                # on_time 별 People Count 계산
+                merged_srcmac_riss_df = merged_srcmac_riss_df.groupby("on_time")[["SRCMAC"]].nunique().reset_index()
+
+                if is_save == True:
+                    # save 폴더가 없으면 save 폴더 생성
+                    if not os.path.exists(os.path.join(self.args.path, "save")):
+                        os.makedirs(os.path.join(self.args.path, "save"))
+                        logger.info(f"The save folder has been created!")
+                    
+                    # location 별 SRCMAC 목록 데이터 저장
+                    save_file = f"{self.args.save_data[:5]}_일자별 시간대별 체류인원수.csv"
+                    merged_srcmac_riss_df.to_csv(f"{os.path.join(self.args.path, "save", save_file)}", index=False, encoding="utf-8-sig")
+                    logger.info(f"{save_file} has been created!")
+            
+            elif on_time == False:
+                # rssi mean 계산
+                riss_diff_df = raw_data_df.groupby("SRCMAC")["RSSI"].agg(["mean"]).astype(int)
+                riss_diff_df.reset_index(inplace=True)
+
+                # srcmac_unique와 rssi mean 병합
+                merged_srcmac_riss_df = pd.merge(srcmac_unique_df, riss_diff_df, left_on="SRCMAC", right_on="SRCMAC", how="left")
+                merged_srcmac_riss_df = merged_srcmac_riss_df[merged_srcmac_riss_df["time_diff"] >= pd.Timedelta(cumsum)].reset_index(drop=True)
+                merged_srcmac_riss_df.columns = ["SRCMAC", "time_min", "time_max", "time_diff", "rssi_mean"]
+
+                if is_save == True:
+                    # save 폴더가 없으면 save 폴더 생성
+                    if not os.path.exists(os.path.join(self.args.path, "save")):
+                        os.makedirs(os.path.join(self.args.path, "save"))
+                        logger.info(f"The save folder has been created!")
+                    
+                    # location 별 SRCMAC 목록 데이터 저장
+                    save_file = f"{self.args.save_data[:5]}_일자별 체류인원항목.csv"
+                    merged_srcmac_riss_df.to_csv(f"{os.path.join(self.args.path, "save", save_file)}", index=False, encoding="utf-8-sig")
+                    logger.info(f"{save_file} has been created!")
 
             logger.info(f"People Count by Non-Location : {merged_srcmac_riss_df.shape}")
 
