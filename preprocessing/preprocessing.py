@@ -220,7 +220,7 @@ class Preprocessing:
 
             return merged_srcmac_riss_df, raw_data_df
 
-    def calc_loc_people_spenttime(self, raw_data, srcmac_unique_df, base_time=6, time_diff="00:01:00", loc=True):
+    def calc_loc_people_spenttime(self, raw_data, srcmac_unique_df, base_time=6, time_diff="00:01:00", loc=False, entry_time=False, is_save=False):
         # 1시간 단위로 그룹화하기 위해 hour 컬럼 추가
         raw_data["hour"] = raw_data["TIME_KST"].dt.floor("h")
         
@@ -238,39 +238,82 @@ class Preprocessing:
         raw_data = raw_data.sort_values(by="TIME_KST", ascending=True).reset_index(drop=True)
 
         # srcmac unique만 추출
-        _srcmac_unique_df = raw_data[raw_data["SRCMAC"].isin(srcmac_unique_df["SRCMAC"])]
-
-        # 각 hour, SRCMAC, locatioon 별 min time과 max time을 계산
-        h_src_loc_df = _srcmac_unique_df.groupby(["SRCMAC", "location", "hour"])["TIME_KST(hh:mm:ss)"].agg(["min", "max"])
-        h_src_loc_df["time_diff"] = h_src_loc_df["max"] - h_src_loc_df["min"]
-
-        # 각 hour, SRCMAC, locatioon 별 rssi mean을 계산
-        rssi_df = _srcmac_unique_df.groupby(["SRCMAC", "location"])["RSSI"].agg(["mean"]).round(0)
-
-        #  h_src_loc_df & rssi_df merge
-        both_df = pd.merge(h_src_loc_df, rssi_df, left_index=True, right_index=True).reset_index()
-
-        # SRCMAC 별 time_diff의 평균이 10시간 이상인 SRCMAC 제거
-        time_diff_sum = both_df.groupby("SRCMAC")["time_diff"].sum()
-        over_basetime_index = time_diff_sum[time_diff_sum > pd.Timedelta(hours=base_time)].index
-        over_basetime_both_df = both_df[~both_df["SRCMAC"].isin(over_basetime_index)].reset_index(drop=True)
-
-        # time_diff가 0 제거
-        over_basetime_both_df = over_basetime_both_df[over_basetime_both_df["time_diff"] > pd.Timedelta(time_diff)].reset_index(drop=True)    
-        logger.info(f"Remove time_diff over Base Time : {over_basetime_both_df.shape}")
+        _srcmac_unique_df = raw_data[raw_data["SRCMAC"].isin(srcmac_unique_df["SRCMAC"])].reset_index(drop=True)
 
         if loc == True:
-            # on_time 별, location 별 time_diff mean을 계산
-            h_loc_spenttime_mean_df = over_basetime_both_df.groupby(["location", "hour"])[["time_diff"]].agg("mean").reset_index()
-            logger.info(f"Average Dwell Time per Location and OnTime : {h_loc_spenttime_mean_df.shape}")
+            """
+            공통적으로 location별, hour 정보가 필요
+            hour 정보가 없으면 location별 입장, 퇴장 시간으로 계산됨
+            """
+            # 각 hour, SRCMAC, locatioon 별 min time과 max time을 계산
+            h_src_loc_df = _srcmac_unique_df.groupby(["SRCMAC", "location", "hour"])["TIME_KST(hh:mm:ss)"].agg(["min", "max"])
+            h_src_loc_df["time_diff"] = h_src_loc_df["max"] - h_src_loc_df["min"]
 
-            return h_loc_spenttime_mean_df, over_basetime_both_df
+            # 각 hour, SRCMAC, locatioon 별 rssi mean을 계산
+            rssi_df = _srcmac_unique_df.groupby(["SRCMAC", "location", "hour"])["RSSI"].agg(["mean"]).round(0)
 
-        else:
-            h_spenttime_mean_df = over_basetime_both_df.groupby("hour")[["time_diff"]].agg("mean").reset_index()
-            logger.info(f"Average Dwell Time per OnTime : {h_spenttime_mean_df.shape}")
+            # h_src_loc_df & rssi_df merge
+            both_df = pd.merge(h_src_loc_df, rssi_df, left_index=True, right_index=True).reset_index()
 
-            return h_spenttime_mean_df, over_basetime_both_df
+            # SRCMAC 별 time_diff의 평균이 10시간 이상인 SRCMAC 제거
+            time_diff_sum = both_df.groupby("SRCMAC")["time_diff"].sum()
+            over_basetime_index = time_diff_sum[time_diff_sum < pd.Timedelta(hours=10)].index
+            over_basetime_both_df = both_df[both_df["SRCMAC"].isin(over_basetime_index)].reset_index(drop=True)
+
+            # time_diff 시간 제거
+            over_basetime_both_df = over_basetime_both_df[over_basetime_both_df["time_diff"] > pd.Timedelta("00:01:00")].reset_index(drop=True)
+
+            """entry time을 포함"""
+            if entry_time == True:
+                # hour 컬럼을 이용하여 entry_time을 계산
+                hour_min_df = over_basetime_both_df.groupby(["SRCMAC", "location"])[["hour"]].agg("min")
+                hour_min_df.columns = ["hour_min"]
+
+                # hour_min_df와 over_basetime_both_df merge를 위한 멀티인덱스 설정 및 merge
+                over_basetime_both_df = over_basetime_both_df.set_index(["SRCMAC", "location"])
+                hour_min_both_df = pd.merge(over_basetime_both_df, hour_min_df, left_index=True, right_index=True).reset_index()
+
+                # SRCMAC, location, hour_max별 time_diff의 합
+                src_loc_h_spenttime_mean_df = hour_min_both_df.groupby(["SRCMAC", "location", "hour_min"])[["time_diff"]].agg("sum").reset_index()
+
+                # location별 평균 time_diff
+                loc_h_spenttime_mean_df = src_loc_h_spenttime_mean_df.groupby(["location", "hour_min"])[["time_diff"]].agg("mean").reset_index()
+
+                if is_save == True:
+                    # save 폴더가 없으면 save 폴더 생성
+                    if not os.path.exists(os.path.join(self.args.path, "save")):
+                        os.makedirs(os.path.join(self.args.path, "save"))
+                        logger.info(f"The save folder has been created!")
+                    
+                    # location 별 SRCMAC 목록 데이터 저장
+                    save_file = f"{self.args.save_data[:5]}_일자별 공간별 시간대별 체류시간.csv"
+                    loc_h_spenttime_mean_df.to_csv(f"{os.path.join(self.args.path, "save", save_file)}", index=False, encoding="utf-8-sig")
+                    logger.info(f"{save_file} has been created!")
+
+                return loc_h_spenttime_mean_df
+            
+            """entry time을 미포함"""
+             # SRCMAC, location별 time_diff의 합
+            src_loc_spenttime_mean_df = over_basetime_both_df.groupby(["SRCMAC", "location"])[["time_diff"]].agg("sum").reset_index()
+
+            # location별 time_diff의 평균
+            loc_spenttime_mean_df = src_loc_spenttime_mean_df.groupby("location")[["time_diff"]].agg("mean").reset_index()
+
+            if is_save == True:
+                # save 폴더가 없으면 save 폴더 생성
+                if not os.path.exists(os.path.join(self.args.path, "save")):
+                    os.makedirs(os.path.join(self.args.path, "save"))
+                    logger.info(f"The save folder has been created!")
+                
+                # location 별 SRCMAC 목록 데이터 저장
+                save_file = f"{self.args.save_data[:5]}_일자별 공간별 체류시간.csv"
+                loc_h_spenttime_mean_df.to_csv(f"{os.path.join(self.args.path, "save", save_file)}", index=False, encoding="utf-8-sig")
+                logger.info(f"{save_file} has been created!")
+
+            return loc_spenttime_mean_df, over_basetime_both_df
+
+        elif loc == False:
+            pass
 
     def create_srcmac_loc_sequence_metrix(self, df):
         _df = df.groupby(["SRCMAC", "location"])[["time_diff"]].mean().reset_index()

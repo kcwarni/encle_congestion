@@ -39,29 +39,35 @@ def main():
     
     if args.task == "gangneung":
         # SRCMAC의 수
-        people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=False, is_save=True)
+        people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=False, is_save=False)
 
         # 시간대별 SRCMAC의 수
-        h_people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=True, is_save=True)
+        h_people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=True, is_save=False)
 
         # 공간별 체류인원수
-        loc_srcmac_cnt, loc_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=False, is_save=True)
+        loc_srcmac_cnt, loc_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=False, is_save=False)
 
         # 공간별 시간별 체류인원수
-        loc_srcmac_cnt, loc_h_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=True, is_save=True)
+        loc_srcmac_cnt, loc_h_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=True, is_save=False)
+
+        # 일자별 공간별 시간대별 평균 체류시간
+        loc_h_spenttime_mean_df = prep.calc_loc_people_spenttime(pre_raw_data, srcmac_unique_df, base_time=10, time_diff="00:01:00", loc=True, entry_time=True, is_save=True)
     
     elif args.task == "kme2024":
          # SRCMAC의 수
-        people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=False, is_save=True)
+        people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=False, is_save=False)
 
         # 시간대별 SRCMAC의 수
-        h_people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=True, is_save=True)
+        h_people_cnt, _ = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=False, on_time=True, is_save=False)
 
         # 공간별 체류인원수
-        loc_srcmac_cnt, loc_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=False, is_save=True)
+        loc_srcmac_cnt, loc_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=False, is_save=False)
 
         # 공간별 시간별 체류인원수
-        loc_srcmac_cnt, loc_h_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=True, is_save=True)
+        loc_srcmac_cnt, loc_h_people_cnt, srcmac_uni_matched_raw_data = prep.calc_loc_people_counts(pre_raw_data, srcmac_unique_df, cumsum="00:01:00", loc=True, on_time=True, is_save=False)
+
+        # 일자별 공간별 시간대별 평균 체류시간
+        loc_h_spenttime_mean_df = prep.calc_loc_people_spenttime(pre_raw_data, srcmac_unique_df, base_time=10, time_diff="00:01:00", loc=True, entry_time=True, is_save=True)
     
     # Location 별 SRCMAC의 수 및 평균 Spenttime
     h_loc_spenttime_mean_df, over_basetime_both_df = prep.calc_loc_people_spenttime(pre_raw_data, srcmac_unique_df, loc=True)
